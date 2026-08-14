@@ -17,6 +17,11 @@ include /usr/share/dpkg/architecture.mk
 	dh $@
 
 
+override_dh_installsystemd:
+	# Network changes require an explicit validate + enable step.
+	dh_installsystemd --no-enable --no-start
+
+
 override_dh_builddeb:
 	# Force creation of XZ compressed Debian archive. Newer versions of Debian
 	# will default to ZSTD which is not yet available in UniFi OS

@@ -73,6 +73,7 @@ _list_profiles() {
     echo "vivo", "Vivo SP (BR)"
     echo "posttv", "PostTV (LU)"
     echo "magentatv", "MagentaTV (DE)"
+    echo "shanghai-telecom", "Shanghai Telecom (CN, isolated routing)"
 }
 
 # Obtain the board name of the device running the installation script
@@ -95,7 +96,17 @@ if [ -e $CONFIGFILE ]; then
     . $CONFIGFILE || true
 
     # Store values from config file into debconf db.
-    db_set udm-iptv/wan-port "$(_if_inet_list_lower /sys/class/net/"$IPTV_WAN_INTERFACE")"
+    # UCG Fiber exposes Port 5/7 as internal switch-backed interfaces. Walking
+    # lower_* therefore resolves eth4/eth6 to switch0, which is not a valid
+    # debconf choice and silently falls back to Port 7 (eth6) on upgrades.
+    case "$board" in
+        UCGF)
+            db_set udm-iptv/wan-port "$IPTV_WAN_INTERFACE"
+            ;;
+        *)
+            db_set udm-iptv/wan-port "$(_if_inet_list_lower /sys/class/net/"$IPTV_WAN_INTERFACE")"
+            ;;
+    esac
     db_set udm-iptv/wan-interface "$IPTV_WAN_INTERFACE"
 
     db_set udm-iptv/wan-vlan-separate "$([ "$IPTV_WAN_INTERFACE" = 0 ] && echo "false" || echo "true")"
@@ -109,6 +120,13 @@ if [ -e $CONFIGFILE ]; then
     db_set udm-iptv/wan-static-ip "$IPTV_WAN_STATIC_IP"
 
     db_set udm-iptv/lan-interfaces "$(echo "$IPTV_LAN_INTERFACES" | tr -s ' ' ',')"
+
+    db_set udm-iptv/route-table "${IPTV_ROUTE_TABLE:-main}"
+    db_set udm-iptv/route-rule-priority "${IPTV_ROUTE_RULE_PRIORITY:-18500}"
+    db_set udm-iptv/allow-main-default-route "${IPTV_ALLOW_MAIN_DEFAULT_ROUTE:-false}"
+    db_set udm-iptv/nat-enable "${IPTV_NAT_ENABLE:-true}"
+    db_set udm-iptv/nat-source-ranges "$(echo "${IPTV_NAT_SOURCE_RANGES:-}" | tr -s ' ' ',')"
+    db_set udm-iptv/allow-unscoped-nat "${IPTV_ALLOW_UNSCOPED_NAT:-false}"
 
     db_set udm-iptv/igmpproxy-program "$IPTV_IGMPPROXY_PROGRAM"
     db_set udm-iptv/igmpproxy-quickleave "$([ -n "$IPTV_IGMPPROXY_DISABLE_QUICKLEAVE" ] && [ "$IPTV_IGMPPROXY_DISABLE_QUICKLEAVE" != "false" ] && echo "false" || echo "true")"

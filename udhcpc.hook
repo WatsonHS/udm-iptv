@@ -14,7 +14,14 @@ export staticroutes
 export router
 export subnet
 
-export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export PATH="${IPTV_COMMAND_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
+
+# Keep routes installed by this hook identifiable and, when configured,
+# outside the main routing table. A dedicated table prevents an IPTV DHCP
+# lease from becoming the gateway's system-wide default route.
+IPTV_ROUTE_TABLE="${IPTV_ROUTE_TABLE:-main}"
+IPTV_ROUTE_PROTOCOL="${IPTV_ROUTE_PROTOCOL:-99}"
+IPTV_ALLOW_MAIN_DEFAULT_ROUTE="${IPTV_ALLOW_MAIN_DEFAULT_ROUTE:-false}"
 
 # Use busybox if iproute2 is not installed
 if ! command -v ip > /dev/null 2>&1; then
@@ -31,7 +38,41 @@ run_scripts() {
 }
 
 deconfig() {
+    route_flush_managed
     ip -4 addr flush dev "$interface"
+}
+
+route_table_is_main() {
+    case "$IPTV_ROUTE_TABLE" in
+        "" | main | 254) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+route_replace() {
+    if route_table_is_main; then
+        ip -4 route replace "$@" proto "$IPTV_ROUTE_PROTOCOL"
+    else
+        ip -4 route replace table "$IPTV_ROUTE_TABLE" "$@" proto "$IPTV_ROUTE_PROTOCOL"
+    fi
+}
+
+route_flush_managed() {
+    if route_table_is_main; then
+        ip -4 route flush proto "$IPTV_ROUTE_PROTOCOL" dev "$interface" 2>/dev/null || true
+    else
+        ip -4 route flush table "$IPTV_ROUTE_TABLE" proto "$IPTV_ROUTE_PROTOCOL" dev "$interface" 2>/dev/null || true
+    fi
+}
+
+route_copy_connected() {
+    route_table_is_main && return
+
+    local connected
+    connected=$(ip -4 route show dev "$interface" scope link | awk 'NR == 1 { print $1 }')
+    if [ -n "$connected" ]; then
+        route_replace "$connected" dev "$interface" scope link src "$ip"
+    fi
 }
 
 if_index() {
@@ -48,15 +89,26 @@ calc_metric() {
 
 route_add() {
     local to=$1 gw=$2 num=$3
+
+    case "$to" in
+        default | 0.0.0.0 | 0.0.0.0/0)
+            if route_table_is_main && [ "$IPTV_ALLOW_MAIN_DEFAULT_ROUTE" != "true" ]; then
+                echo "Ignoring IPTV DHCP default route on $interface; configure a dedicated IPTV_ROUTE_TABLE or explicitly set IPTV_ALLOW_MAIN_DEFAULT_ROUTE=true" >&2
+                return 0
+            fi
+            to="default"
+            ;;
+    esac
+
     # special case for /32 subnets:
     # /32 instructs kernel to always use routing for all outgoing packets
     # (they can never be sent to local subnet - there is no local subnet for /32).
     # Used in datacenters, avoids the need for private ip-addresses between two hops.
     if [ "$subnet" = "255.255.255.255" ]; then
-        ip -4 route add $gw dev $interface
+        route_replace "$gw" dev "$interface" scope link
     fi
-    ip -4 route add $to via $gw dev $interface \
-        metric $(($num + ${IF_METRIC:-$(calc_metric)}))
+    route_replace "$to" via "$gw" dev "$interface" onlink \
+        metric $((num + ${IF_METRIC:-$(calc_metric)}))
 }
 
 routes() {
@@ -64,9 +116,8 @@ routes() {
     for i in $NO_GATEWAY; do
         [ "$i" = "$interface" ] && return
     done
-    while ip -4 route del default via dev $interface 2>/dev/null; do
-        :
-    done
+    route_flush_managed
+    route_copy_connected
     local num=0
     # RFC3442:
     # If the DHCP server returns both a Classless Static Routes option
@@ -76,7 +127,10 @@ routes() {
         set -- $staticroutes
         while [ -n "$1" ] && [ -n "$2" ]; do
             local dest="$1" gw="$2"
-            if [ "$gw" != "0.0.0.0" ]; then
+            if [ "$gw" = "0.0.0.0" ]; then
+                route_replace "$dest" dev "$interface" scope link \
+                    metric $((num + ${IF_METRIC:-$(calc_metric)})) && num=$((num + 1))
+            else
                 route_add $dest $gw $num && num=$(($num + 1))
             fi
             shift 2
@@ -101,13 +155,7 @@ renew() {
         ip -4 addr add $ip/$mask ${broadcast:+broadcast $broadcast} dev $interface
     fi
 
-    local i
-    for i in $router; do
-        if ! ip -4 route show | grep ^default | grep $i; then
-            routes
-            break
-        fi
-    done
+    routes
 }
 
 case "$1" in

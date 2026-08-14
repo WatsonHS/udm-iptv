@@ -65,6 +65,36 @@ Choices: ${choices}
 Choices-C: ${choices_c}
 Default: br0
 
+Template: udm-iptv/route-table
+_Description: Routing table for IPTV DHCP and static routes:
+Type: string
+Default: main
+
+Template: udm-iptv/route-rule-priority
+_Description: Starting priority for IPTV LAN policy rules:
+Type: string
+Default: 18500
+
+Template: udm-iptv/allow-main-default-route
+_Description: Allow IPTV DHCP to install a default route in the main routing table?
+Type: boolean
+Default: false
+
+Template: udm-iptv/nat-enable
+_Description: Enable source NAT towards the IPTV WAN?
+Type: boolean
+Default: true
+
+Template: udm-iptv/nat-source-ranges
+_Description: Source networks allowed to use IPTV NAT:
+Type: string
+Default:
+
+Template: udm-iptv/allow-unscoped-nat
+_Description: Allow unscoped NAT when IPTV WAN ranges include 0.0.0.0/0?
+Type: boolean
+Default: false
+
 Template: udm-iptv/igmpproxy-program
 _Description: IGMP Proxy implementation:
 Type: select

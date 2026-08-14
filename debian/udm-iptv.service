@@ -6,8 +6,9 @@ Conflicts=igmpproxy.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/udm-iptv.conf
+ExecStartPre=/usr/lib/udm-iptv/udm-iptvd validate
 ExecStart=/usr/lib/udm-iptv/udm-iptvd start
-ExecStop=/usr/lib/udm-iptv/udm-iptvd stop
+ExecStopPost=/usr/lib/udm-iptv/udm-iptvd stop
 Restart=on-failure
 RestartSec=5s
 

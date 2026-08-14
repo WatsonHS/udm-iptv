@@ -10,6 +10,9 @@
 
 set -eu
 
+UDM_IPTV_CONFIG_FILE="${UDM_IPTV_CONFIG_FILE:-/etc/udm-iptv.conf}"
+UDM_IPTV_DAEMON="${UDM_IPTV_DAEMON:-/usr/lib/udm-iptv/udm-iptvd}"
+
 # (Re)configure the udm-iptv installation
 udm_iptv_configure()
 {
@@ -20,7 +23,7 @@ udm_iptv_configure()
 udm_iptv_upgrade()
 {
     echo "Running udm-iptv installer..."
-    sh -c "$(curl https://raw.githubusercontent.com/fabianishere/udm-iptv/master/install.sh -sSf)"
+    sh -c "$(curl https://raw.githubusercontent.com/WatsonHS/udm-iptv/master/install.sh -sSf)"
 }
 
 # Remove the udm-iptv installation from the system
@@ -35,10 +38,41 @@ udm_iptv_restart()
     systemctl restart udm-iptv
 }
 
+# Validate and explicitly enable the service after package installation
+udm_iptv_enable()
+{
+    udm_iptv_validate
+    systemctl enable --now udm-iptv
+}
+
+# Disable the service and execute its idempotent teardown
+udm_iptv_disable()
+{
+    systemctl disable --now udm-iptv
+}
+
+# Validate configuration without changing interfaces, routes or firewall rules
+udm_iptv_validate()
+{
+    if ! [ -e "$UDM_IPTV_CONFIG_FILE" ] ; then
+        echo "error: The configuration for udm-iptv is not found."
+        exit 1
+    fi
+
+    # Export sourced values so the separate daemon validation process receives
+    # the same configuration that systemd would load through EnvironmentFile.
+    set -a
+    # shellcheck source=udm-iptv.conf
+    . "$UDM_IPTV_CONFIG_FILE"
+    set +a
+    "$UDM_IPTV_DAEMON" validate
+    echo "Configuration is safe to start."
+}
+
 # Print diagnostics for troubleshooting
 udm_iptv_diagnose()
 {
-    if ! [ -e /etc/udm-iptv.conf ] ; then
+    if ! [ -e "$UDM_IPTV_CONFIG_FILE" ] ; then
         echo "error: The configuration for udm-iptv is not found."
         echo "Please reconfigure your udm-iptv installation:"
         echo "    udm-iptv reconfigure"
@@ -46,7 +80,7 @@ udm_iptv_diagnose()
     fi
 
     # Load configuration
-    . /etc/udm-iptv.conf
+    . "$UDM_IPTV_CONFIG_FILE"
 
     if [ "$IPTV_WAN_VLAN" -ne 0 ]; then
         target="$IPTV_WAN_VLAN_INTERFACE"
@@ -64,12 +98,25 @@ udm_iptv_diagnose()
     fi
     echo "WAN Ranges: $IPTV_WAN_RANGES"
     echo "LAN Interfaces: $IPTV_LAN_INTERFACES"
+    echo "Route Table: ${IPTV_ROUTE_TABLE:-main}"
+    echo "Route Rule Priority: ${IPTV_ROUTE_RULE_PRIORITY:-18500}"
+    echo "Allow Main Default Route: ${IPTV_ALLOW_MAIN_DEFAULT_ROUTE:-false}"
+    echo "NAT Enabled: ${IPTV_NAT_ENABLE:-true}"
+    echo "NAT Source Ranges: ${IPTV_NAT_SOURCE_RANGES:-<unscoped>}"
     echo "IGMP Proxy quickleave disabled: $IPTV_IGMPPROXY_DISABLE_QUICKLEAVE"
     echo "IGMP Proxy debug: $IPTV_IGMPPROXY_DEBUG"
 
     echo "=== IP Link and Route ==="
     ip -4 addr show dev "$target" || true
-    ip route show dev "$target" || true
+    ip -4 route show table "${IPTV_ROUTE_TABLE:-main}" dev "$target" || true
+    ip -4 rule show | grep "lookup ${IPTV_ROUTE_TABLE:-main}" || true
+
+    if ip -4 route show table main default dev "$target" | grep -q .; then
+        echo "WARNING: IPTV interface owns a default route in the main table"
+        ip -4 route show table main default dev "$target"
+    else
+        echo "Main-table default route leak: none"
+    fi
 
     echo "=== Service Logs ==="
     journalctl -u udm-iptv | tail
@@ -85,7 +132,10 @@ Commands:
   configure         Re-configure the udm-iptv installation
   upgrade           Upgrade the udm-iptv installation to the latest version
   uninstall         Remove udm-iptv from the system
+  enable            Validate, enable and start the udm-iptv service
+  disable           Stop, clean up and disable the udm-iptv service
   restart           Restart the udm-iptv daemon
+  validate          Validate configuration without changing the network
   diagnose          Diagnose issues with the current configuration
 Options:
   -h, --help    Show this message and exit
@@ -115,9 +165,21 @@ case $1 in
         shift
         udm_iptv_uninstall "$@"
         ;;
+    enable|start)
+        shift
+        udm_iptv_enable "$@"
+        ;;
+    disable|stop)
+        shift
+        udm_iptv_disable "$@"
+        ;;
     restart)
         shift
         udm_iptv_restart "$@"
+        ;;
+    validate)
+        shift
+        udm_iptv_validate "$@"
         ;;
     diag|diagnose)
         shift
