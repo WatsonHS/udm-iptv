@@ -10,6 +10,9 @@
 
 set -eu
 
+UDM_IPTV_CONFIG_FILE="${UDM_IPTV_CONFIG_FILE:-/etc/udm-iptv.conf}"
+UDM_IPTV_DAEMON="${UDM_IPTV_DAEMON:-/usr/lib/udm-iptv/udm-iptvd}"
+
 # (Re)configure the udm-iptv installation
 udm_iptv_configure()
 {
@@ -51,21 +54,25 @@ udm_iptv_disable()
 # Validate configuration without changing interfaces, routes or firewall rules
 udm_iptv_validate()
 {
-    if ! [ -e /etc/udm-iptv.conf ] ; then
+    if ! [ -e "$UDM_IPTV_CONFIG_FILE" ] ; then
         echo "error: The configuration for udm-iptv is not found."
         exit 1
     fi
 
+    # Export sourced values so the separate daemon validation process receives
+    # the same configuration that systemd would load through EnvironmentFile.
+    set -a
     # shellcheck source=udm-iptv.conf
-    . /etc/udm-iptv.conf
-    /usr/lib/udm-iptv/udm-iptvd validate
+    . "$UDM_IPTV_CONFIG_FILE"
+    set +a
+    "$UDM_IPTV_DAEMON" validate
     echo "Configuration is safe to start."
 }
 
 # Print diagnostics for troubleshooting
 udm_iptv_diagnose()
 {
-    if ! [ -e /etc/udm-iptv.conf ] ; then
+    if ! [ -e "$UDM_IPTV_CONFIG_FILE" ] ; then
         echo "error: The configuration for udm-iptv is not found."
         echo "Please reconfigure your udm-iptv installation:"
         echo "    udm-iptv reconfigure"
@@ -73,7 +80,7 @@ udm_iptv_diagnose()
     fi
 
     # Load configuration
-    . /etc/udm-iptv.conf
+    . "$UDM_IPTV_CONFIG_FILE"
 
     if [ "$IPTV_WAN_VLAN" -ne 0 ]; then
         target="$IPTV_WAN_VLAN_INTERFACE"
