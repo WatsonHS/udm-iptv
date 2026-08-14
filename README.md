@@ -102,7 +102,7 @@ multicast IPTV traffic between WAN and LAN.
 ### Installation
 SSH into your machine and execute the commands below in UniFi OS (not in UbiOS).
 ```bash
-sh -c "$(curl https://raw.githubusercontent.com/fabianishere/udm-iptv/master/install.sh -sSf)"
+sh -c "$(curl https://raw.githubusercontent.com/WatsonHS/udm-iptv/master/install.sh -sSf)"
 ```
 
 This script will install the `udm-iptv` package onto your device.
@@ -125,6 +125,7 @@ popular IPTV providers. Below is a list of supported IPTV providers:
 |  Vivo GVT |   BR    | Yes - [Manual configuration necessary](https://github.com/fabianishere/udm-iptv/issues/167#issuecomment-1244797462) |
 |   Telenor |   NO    | Yes                                                                                                                 |
 |    PostTV |   LU    | [Manual configuration necessary](https://github.com/fabianishere/udm-iptv/discussions/86#discussioncomment-2345968) |
+| Shanghai Telecom | CN | Yes, with an isolated IPTV routing table and VLAN 85 profile                                                      |
 
 If your ISP is not supported, you may select the _Custom_ profile, which allows
 you manually configure the package to your needs. 
@@ -164,10 +165,68 @@ See below for a reference of the available options to configure:
 | IPTV_WAN_STATIC_IP    | Static IP address to assign to the IPTV WAN (VLAN) interface (if DHCP is disabled)                      |
 | IPTV_WAN_MAC          | Custom MAC address to assign to the IPTV WAN VLAN interface                                             |
 | IPTV_LAN_INTERFACES   | Interfaces on which IPTV should be made available                                                       |
+| IPTV_ROUTE_TABLE      | Routing table for IPTV DHCP/static routes; use a dedicated numeric table on multi-WAN gateways          |
+| IPTV_ROUTE_RULE_PRIORITY | Starting priority for policy rules that send IPTV LAN interfaces to the dedicated table              |
+| IPTV_ALLOW_MAIN_DEFAULT_ROUTE | Explicit opt-in for an IPTV DHCP default route in the main table; defaults to `false`             |
+| IPTV_NAT_ENABLE       | Enable source NAT towards the IPTV WAN                                                                  |
+| IPTV_NAT_SOURCE_RANGES | Client source networks allowed to use IPTV NAT                                                         |
+| IPTV_ALLOW_UNSCOPED_NAT | Explicit opt-in for destination-only NAT when WAN ranges include `0.0.0.0/0`; defaults to `false`     |
 | IPTV_IGMPPROXY_DEBUG  | Enable debugging for igmpproxy                                                                          |
 | IPTV_IGMPPROXY_DISABLE_QUICKLEAVE | Boolean to disables the quickleave feature for the IGMP Proxy. Set this to true if you have more than one IPTV decoder. Supported by both improxy and igmpproxy. |
 
 The configuration is written to `/etc/udm-iptv.conf` (within UniFi OS).
+
+### Isolated routing on multi-WAN gateways
+
+Some IPTV DHCP servers advertise a default route. The original helper placed
+that route in Linux's main table, which can take over Internet routing on a
+UniFi gateway whose normal WANs are managed in separate policy tables.
+
+Set `IPTV_ROUTE_TABLE` to a dedicated numeric table to isolate every DHCP and
+manual IPTV route. The service then adds one policy rule for each interface in
+`IPTV_LAN_INTERFACES`. A lookup that has no matching IPTV route falls through to
+the normal UniFi routing policy; a DHCP default route remains usable only by
+clients entering through the IPTV LAN interface.
+
+The service also refuses two high-risk configurations by default:
+
+* a DHCP default route in the main table; and
+* `0.0.0.0/0` IPTV NAT without an explicit source subnet.
+
+Run the non-mutating preflight before starting the service:
+
+```bash
+udm-iptv validate
+```
+
+### Shanghai Telecom on UCG Fiber
+
+The bundled `Shanghai Telecom (CN, isolated routing)` profile targets this
+topology:
+
+* IPTV arrives as VLAN 85 on the selected UCG Fiber WAN port;
+* IPTV viewers are attached to UniFi network `br85` (`192.168.85.0/24`);
+* regular Internet uses independently managed primary and backup WANs.
+
+Its safety-critical settings are equivalent to:
+
+```bash
+IPTV_WAN_VLAN="85"
+IPTV_WAN_VLAN_INTERFACE="iptv"
+IPTV_WAN_RANGES="0.0.0.0/0"
+IPTV_WAN_DHCP_OPTIONS="-o -O subnet -O broadcast -O staticroutes"
+IPTV_LAN_INTERFACES="br85"
+IPTV_ROUTE_TABLE="185"
+IPTV_ROUTE_RULE_PRIORITY="18500"
+IPTV_ALLOW_MAIN_DEFAULT_ROUTE="false"
+IPTV_NAT_ENABLE="true"
+IPTV_NAT_SOURCE_RANGES="192.168.85.0/24"
+IPTV_ALLOW_UNSCOPED_NAT="false"
+```
+
+Change the LAN interface and source subnet together if your UniFi IPTV network
+does not use VLAN 85. Do not enable either safety escape hatch on a gateway
+that also carries normal Internet traffic.
 
 ### Upgrading
 Use the following command to upgrade `udm-iptv`:

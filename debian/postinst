@@ -79,6 +79,24 @@ fi
 db_get udm-iptv/lan-interfaces
 replace_conf "$tmpconf" "IPTV_LAN_INTERFACES" "$(echo "$RET" | tr ',' ' ')"
 
+db_get udm-iptv/route-table
+replace_conf "$tmpconf" "IPTV_ROUTE_TABLE" "$RET"
+
+db_get udm-iptv/route-rule-priority
+replace_conf "$tmpconf" "IPTV_ROUTE_RULE_PRIORITY" "$RET"
+
+db_get udm-iptv/allow-main-default-route
+replace_conf "$tmpconf" "IPTV_ALLOW_MAIN_DEFAULT_ROUTE" "$RET"
+
+db_get udm-iptv/nat-enable
+replace_conf "$tmpconf" "IPTV_NAT_ENABLE" "$RET"
+
+db_get udm-iptv/nat-source-ranges
+replace_conf "$tmpconf" "IPTV_NAT_SOURCE_RANGES" "$(echo "$RET" | tr ',' ' ')"
+
+db_get udm-iptv/allow-unscoped-nat
+replace_conf "$tmpconf" "IPTV_ALLOW_UNSCOPED_NAT" "$RET"
+
 
 db_get udm-iptv/igmpproxy-program
 replace_conf "$tmpconf" "IPTV_IGMPPROXY_PROGRAM" "$RET"

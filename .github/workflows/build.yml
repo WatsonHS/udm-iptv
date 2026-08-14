@@ -12,7 +12,12 @@ jobs:
         with:
           path: udm-iptv
       - name: Setup Dependencies
-        run: sudo apt-get install devscripts debhelper build-essential
+        run: sudo apt-get install devscripts debhelper build-essential shellcheck
+      - name: Run shell checks
+        run: |
+          cd udm-iptv
+          shellcheck --severity=error udhcpc.hook udm-iptvd udm-iptv profiles/*.profile debian/config debian/postinst
+          sh tests/run.sh
       - name: Build Package
         run: |
           cd udm-iptv
