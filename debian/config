@@ -96,7 +96,17 @@ if [ -e $CONFIGFILE ]; then
     . $CONFIGFILE || true
 
     # Store values from config file into debconf db.
-    db_set udm-iptv/wan-port "$(_if_inet_list_lower /sys/class/net/"$IPTV_WAN_INTERFACE")"
+    # UCG Fiber exposes Port 5/7 as internal switch-backed interfaces. Walking
+    # lower_* therefore resolves eth4/eth6 to switch0, which is not a valid
+    # debconf choice and silently falls back to Port 7 (eth6) on upgrades.
+    case "$board" in
+        UCGF)
+            db_set udm-iptv/wan-port "$IPTV_WAN_INTERFACE"
+            ;;
+        *)
+            db_set udm-iptv/wan-port "$(_if_inet_list_lower /sys/class/net/"$IPTV_WAN_INTERFACE")"
+            ;;
+    esac
     db_set udm-iptv/wan-interface "$IPTV_WAN_INTERFACE"
 
     db_set udm-iptv/wan-vlan-separate "$([ "$IPTV_WAN_INTERFACE" = 0 ] && echo "false" || echo "true")"
