@@ -133,10 +133,14 @@ We appreciate if you share the configuration so others can also benefit.
 See the [profiles](profiles) directory for examples of existing configuration
 profiles.
 
-The package installs a service that is started during the
-boot process of your UniFi device and that will set up the applications
-necessary to route IPTV traffic. After installation, the service is automatically
-started.
+The package installs the service in a disabled state. Network configuration is
+never applied as a side effect of package installation. Review
+`/etc/udm-iptv.conf`, then explicitly validate and enable it:
+
+```bash
+udm-iptv validate
+udm-iptv enable
+```
 
 If you experience any issues while setting up the service, please visit the
 [Troubleshooting](#troubleshooting) section.
@@ -198,6 +202,9 @@ Run the non-mutating preflight before starting the service:
 ```bash
 udm-iptv validate
 ```
+
+Use `udm-iptv disable` for an idempotent rollback. It removes the service-owned
+policy rules, routes, NAT rules and VLAN interface.
 
 ### Shanghai Telecom on UCG Fiber
 

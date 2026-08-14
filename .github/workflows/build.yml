@@ -22,6 +22,16 @@ jobs:
         run: |
           cd udm-iptv
           debuild -uc -us --lintian-opts --profile debian
+      - name: Verify package safety
+        run: |
+          package=$(find . -maxdepth 1 -name 'udm-iptv_*_all.deb' -print -quit)
+          test -n "$package"
+          dpkg-deb --ctrl-tarfile "$package" | tar -xOf - ./postinst > /tmp/udm-iptv.postinst
+          if grep -Eq 'deb-systemd-invoke.*(start|restart)' /tmp/udm-iptv.postinst; then
+            echo "Package must not auto-start udm-iptv" >&2
+            exit 1
+          fi
+          dpkg-deb --contents "$package" | grep -q 'profiles/shanghai-telecom.profile'
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:

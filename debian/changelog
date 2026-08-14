@@ -5,6 +5,7 @@ udm-iptv (3.0.6+watsonhs1) unstable; urgency=medium
   * Add a guarded Shanghai Telecom profile for UCG Fiber.
   * Prefer igmpproxy for current UniFi OS multicast behavior.
   * Make service teardown remove policy rules, routes, NAT and VLAN state.
+  * Require explicit validation and enablement after installation.
 
  -- Wilson Huang <watsonh@foxmail.com>  Sat, 15 Aug 2026 05:30:00 +0800
 

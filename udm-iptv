@@ -35,6 +35,19 @@ udm_iptv_restart()
     systemctl restart udm-iptv
 }
 
+# Validate and explicitly enable the service after package installation
+udm_iptv_enable()
+{
+    udm_iptv_validate
+    systemctl enable --now udm-iptv
+}
+
+# Disable the service and execute its idempotent teardown
+udm_iptv_disable()
+{
+    systemctl disable --now udm-iptv
+}
+
 # Validate configuration without changing interfaces, routes or firewall rules
 udm_iptv_validate()
 {
@@ -112,6 +125,8 @@ Commands:
   configure         Re-configure the udm-iptv installation
   upgrade           Upgrade the udm-iptv installation to the latest version
   uninstall         Remove udm-iptv from the system
+  enable            Validate, enable and start the udm-iptv service
+  disable           Stop, clean up and disable the udm-iptv service
   restart           Restart the udm-iptv daemon
   validate          Validate configuration without changing the network
   diagnose          Diagnose issues with the current configuration
@@ -142,6 +157,14 @@ case $1 in
     uninstall)
         shift
         udm_iptv_uninstall "$@"
+        ;;
+    enable|start)
+        shift
+        udm_iptv_enable "$@"
+        ;;
+    disable|stop)
+        shift
+        udm_iptv_disable "$@"
         ;;
     restart)
         shift
