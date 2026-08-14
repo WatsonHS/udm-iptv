@@ -21,5 +21,12 @@ db_set udm-iptv/nat-enable true
 db_set udm-iptv/nat-source-ranges "192.168.85.0/24"
 db_set udm-iptv/allow-unscoped-nat false
 
-db_set udm-iptv/igmpproxy-program igmpproxy
+# Prefer igmpproxy when it is already available, but use the UniFi-provided
+# improxy binary on stock UCG Fiber installations instead of pulling in and
+# auto-registering another system service during the migration.
+proxy_program=improxy
+if command -v igmpproxy >/dev/null 2>&1; then
+    proxy_program=igmpproxy
+fi
+db_set udm-iptv/igmpproxy-program "$proxy_program"
 db_set udm-iptv/igmpproxy-quickleave false
